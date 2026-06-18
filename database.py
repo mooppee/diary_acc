@@ -39,7 +39,6 @@ def create_tables():
 
 
 def add_category(name, category_type, description):
-    # добавляем одну категорию в таблицу categories
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -57,6 +56,37 @@ def get_categories():
     categories = cursor.fetchall()
     connection.close()
     return categories
+
+
+def add_transaction(amount, description, transaction_type, category_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        "INSERT INTO transactions (amount, description, type, category_id) VALUES (?, ?, ?, ?)",
+        (amount, description, transaction_type, category_id)
+    )
+    connection.commit()
+    connection.close()
+
+
+def get_transactions():
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("""
+        SELECT
+            transactions.id,
+            transactions.amount,
+            transactions.description,
+            transactions.type,
+            categories.name,
+            transactions.created_at
+        FROM transactions
+        LEFT JOIN categories ON transactions.category_id = categories.id
+        ORDER BY transactions.id DESC
+    """)
+    transactions = cursor.fetchall()
+    connection.close()
+    return transactions
 
 
 if __name__ == "__main__":
