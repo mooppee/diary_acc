@@ -1,18 +1,23 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 import database
+import ai
 
 # создаём наше веб-приложение
 app = FastAPI()
 
 
-# описываем, какие данные ждём при добавлении операции.
-# FastAPI сам проверит, что пришли все поля и нужного типа.
+# данные для добавления операции вручную
 class TransactionInput(BaseModel):
-    amount: float          # сумма
-    description: str       # описание
-    type: str              # "доход" или "расход"
-    category_id: int       # id категории из таблицы categories
+    amount: float
+    description: str
+    type: str
+    category_id: int
+
+
+# данные для операции из текста (бот пришлёт сюда просто строку)
+class TextInput(BaseModel):
+    text: str
 
 
 @app.get("/")
@@ -32,7 +37,6 @@ def read_categories():
             "description": category[3]
         })
     return result
-
 
 
 @app.post("/transactions")
@@ -60,3 +64,35 @@ def read_transactions():
             "created_at": t[5]
         })
     return result
+
+
+# главная новинка: операция из обычного текста через Claude
+@app.post("/transactions/from-text")
+def create_from_text(data: TextInput):
+    # 1. отправляем текст Claude, он возвращает сумму, тип и категорию
+    result = ai.analyze_text(data.text)
+
+    # 2. сначала пробуем найти категорию по точному названию
+    category = database.get_category_by_name(result["category"])
+
+    # 3. если такой категории нет (Claude назвал её по-своему) -
+    #    кладём операцию в запасную категорию "Прочий доход/расход"
+    if category is None:
+        category = database.get_fallback_category(result["type"])
+
+    # 4. если и запасной категории нет - честно сообщаем об ошибке
+    if category is None:
+        return {"error": "Не нашёл подходящую категорию для типа: " + result["type"]}
+
+    category_id = category[0]
+
+    # 5. сохраняем операцию (в описание кладём исходный текст пользователя)
+    database.add_transaction(result["amount"], data.text, result["type"], category_id)
+
+    # 6. сообщаем, что записали (категорию берём ту, что реально из базы)
+    return {
+        "message": "Операция сохранена через Claude!",
+        "amount": result["amount"],
+        "type": result["type"],
+        "category": category[1]
+    }

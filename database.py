@@ -1,9 +1,11 @@
 import sqlite3
 
+# имя файла, в котором будет лежать наша база данных
 DB_NAME = "diary.db"
 
 
 def get_connection():
+    # открываем соединение с базой данных
     connection = sqlite3.connect(DB_NAME)
     return connection
 
@@ -12,6 +14,7 @@ def create_tables():
     connection = get_connection()
     cursor = connection.cursor()
 
+    # таблица категорий (например: Еда, Зарплата, Транспорт)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,6 +24,7 @@ def create_tables():
         )
     """)
 
+    # таблица операций (доходы и расходы)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,6 +43,7 @@ def create_tables():
 
 
 def add_category(name, category_type, description):
+    # добавляем одну категорию в таблицу categories
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -50,6 +55,7 @@ def add_category(name, category_type, description):
 
 
 def get_categories():
+    # достаём все категории из базы
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("SELECT id, name, type, description FROM categories")
@@ -58,7 +64,28 @@ def get_categories():
     return categories
 
 
+def get_category_by_name(name):
+    # ищем одну категорию по её названию (нужно, чтобы узнать её id)
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("SELECT id, name, type, description FROM categories WHERE name = ?", (name,))
+    category = cursor.fetchone()
+    connection.close()
+    return category
+
+
+def get_fallback_category(transaction_type):
+    # запасная категория для операций, которым не нашлась точная.
+    # "доход"  -> категория "Прочий доход"
+    # "расход" -> категория "Прочий расход"
+    if transaction_type == "доход":
+        return get_category_by_name("Прочий доход")
+    else:
+        return get_category_by_name("Прочий расход")
+
+
 def add_transaction(amount, description, transaction_type, category_id):
+    # сохраняем одну операцию в таблицу transactions
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -70,6 +97,8 @@ def add_transaction(amount, description, transaction_type, category_id):
 
 
 def get_transactions():
+    # достаём все операции из базы, вместе с названием категории.
+    # JOIN соединяет таблицу операций с таблицей категорий по category_id.
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("""
@@ -89,5 +118,6 @@ def get_transactions():
     return transactions
 
 
+# этот блок выполняется, только если запустить файл напрямую: python database.py
 if __name__ == "__main__":
     create_tables()
