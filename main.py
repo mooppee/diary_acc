@@ -20,6 +20,13 @@ class TextInput(BaseModel):
     text: str
 
 
+# данные для создания новой категории (из Streamlit)
+class CategoryInput(BaseModel):
+    name: str
+    type: str
+    description: str = ""
+
+
 @app.get("/")
 def home():
     return {"message": "Дневник-бухгалтер работает!"}
@@ -37,6 +44,16 @@ def read_categories():
             "description": category[3]
         })
     return result
+
+
+@app.post("/categories")
+def create_category(category: CategoryInput):
+    # проверим, что категории с таким именем ещё нет
+    existing = database.get_category_by_name(category.name)
+    if existing is not None:
+        return {"error": "Категория с таким названием уже есть"}
+    database.add_category(category.name, category.type, category.description)
+    return {"message": "Категория добавлена!"}
 
 
 @app.post("/transactions")
