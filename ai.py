@@ -8,11 +8,9 @@ def analyze_text(text):
     objects = database.get_objects()
     categories = database.get_categories()
 
-    # список объектов — Claude выбирает строго из них
     object_names = [o[1] for o in objects]
     objects_line = ", ".join(object_names)
 
-    # категории с типом, описанием и их подкатегориями
     categories_text = ""
     for category in categories:
         cat_id, cat_name, cat_type, cat_desc = category
@@ -52,7 +50,3 @@ def analyze_text(text):
     answer = response.content[0].text
     answer = answer.replace("```json", "").replace("```", "").strip()
     return json.loads(answer)
-
-
-if __name__ == "__main__":
-    print(analyze_text("щебень на дс13 127600"))

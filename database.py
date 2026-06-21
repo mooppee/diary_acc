@@ -1,6 +1,5 @@
 import sqlite3
 
-# имя файла базы данных
 DB_NAME = "diary.db"
 
 
@@ -12,7 +11,6 @@ def create_tables():
     connection = get_connection()
     cursor = connection.cursor()
 
-    # объекты (направления): ДС13, Каменка, Личное...
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS objects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,7 +19,6 @@ def create_tables():
         )
     """)
 
-    # категории трат: Материалы, Зарплата...
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +28,6 @@ def create_tables():
         )
     """)
 
-    # подкатегории (деталь внутри категории): Песок, Армен, Камаз...
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS subcategories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +39,6 @@ def create_tables():
         )
     """)
 
-    # операции: со ссылками на объект/категорию/подкатегорию + количество и единица
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,10 +59,9 @@ def create_tables():
 
     connection.commit()
     connection.close()
-    print("Таблицы созданы!")
+    print("Таблицы созданы")
 
 
-# ========== ОБЪЕКТЫ ==========
 def add_object(name, description=""):
     connection = get_connection()
     cursor = connection.cursor()
@@ -94,7 +88,6 @@ def get_object_by_name(name):
     return row
 
 
-# ========== КАТЕГОРИИ ==========
 def add_category(name, category_type, description=""):
     connection = get_connection()
     cursor = connection.cursor()
@@ -122,7 +115,6 @@ def get_category_by_name(name):
     return row
 
 
-# ========== ПОДКАТЕГОРИИ ==========
 def add_subcategory(name, category_id, description=""):
     connection = get_connection()
     cursor = connection.cursor()
@@ -151,7 +143,6 @@ def get_subcategory_by_name(name, category_id):
     return row
 
 
-# ========== ОПЕРАЦИИ ==========
 def add_transaction(amount, comment, transaction_type, object_id, category_id, subcategory_id, quantity=None, unit=None):
     connection = get_connection()
     cursor = connection.cursor()

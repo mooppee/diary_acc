@@ -6,7 +6,6 @@ import ai
 app = FastAPI()
 
 
-# данные для операции из текста (бот пришлёт строку)
 class TextInput(BaseModel):
     text: str
 
@@ -50,44 +49,39 @@ def read_transactions():
 
 @app.post("/transactions/from-text")
 def create_from_text(data: TextInput):
-    # 1. Claude разбирает текст
     result = ai.analyze_text(data.text)
 
     amount = result["amount"]
     transaction_type = result["type"]
     comment = result.get("comment", data.text)
 
-    created = []  # что создали нового — сообщим пользователю
+    created = []
 
-    # 2. ОБЪЕКТ: только из существующих, иначе "Без объекта"
     object_row = database.get_object_by_name(result.get("object", ""))
     if object_row is None:
         object_row = database.get_object_by_name("Без объекта")
     object_id = object_row[0]
 
-    # 3. КАТЕГОРИЯ: ищем по имени, если нет — создаём
     category_name = (result.get("category") or "").strip()
     if category_name == "":
         category_name = "Прочий доход" if transaction_type == "доход" else "Прочий расход"
     category_row = database.get_category_by_name(category_name)
     if category_row is None:
-        database.add_category(category_name, transaction_type, "Создано автоматически")
+        database.add_category(category_name, transaction_type, "")
         category_row = database.get_category_by_name(category_name)
         created.append(f"категория «{category_name}»")
     category_id = category_row[0]
 
-    # 4. ПОДКАТЕГОРИЯ: необязательная; если есть имя — ищем/создаём
     subcategory_id = None
     subcategory_name = (result.get("subcategory") or "").strip()
     if subcategory_name != "":
         sub_row = database.get_subcategory_by_name(subcategory_name, category_id)
         if sub_row is None:
-            database.add_subcategory(subcategory_name, category_id, "Создано автоматически")
+            database.add_subcategory(subcategory_name, category_id, "")
             sub_row = database.get_subcategory_by_name(subcategory_name, category_id)
             created.append(f"подкатегория «{subcategory_name}»")
         subcategory_id = sub_row[0]
 
-    # 5. количество и единица измерения (необязательные)
     quantity = result.get("quantity")
     try:
         quantity = float(quantity) if quantity not in (None, "") else None
@@ -95,10 +89,8 @@ def create_from_text(data: TextInput):
         quantity = None
     unit = (result.get("unit") or "").strip() or None
 
-    # 6. сохраняем операцию
     database.add_transaction(amount, comment, transaction_type, object_id, category_id, subcategory_id, quantity, unit)
 
-    # 7. ответ
     return {
         "message": "Операция сохранена!",
         "amount": amount,

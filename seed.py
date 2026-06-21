@@ -2,8 +2,6 @@ import database
 
 database.create_tables()
 
-# ============ ОБЪЕКТЫ ============
-# Направления. Их ведёшь ты — бот новые объекты НЕ создаёт.
 objects = [
     ("Каменка", ""),
     ("Узловая", ""),
@@ -13,11 +11,9 @@ objects = [
     ("Техника", "Расходы на машины и спецтехнику"),
     ("Личное", "Личные траты"),
     ("Квартира", "Квартира, кредиты, семья"),
-    ("Без объекта", "Сюда попадает операция, если объект не указан"),
+    ("Без объекта", "Когда объект не указан"),
 ]
 
-# ============ КАТЕГОРИИ И ПОДКАТЕГОРИИ ============
-# (название, тип, описание, [список подкатегорий])
 categories = [
     ("Оплата за работы", "доход",
      "Поступления от заказчиков: оплата за объект, за доставку оборудования, за выполненные работы",
@@ -61,13 +57,11 @@ categories = [
 
 
 def seed():
-    # объекты
     for name, desc in objects:
         if database.get_object_by_name(name) is None:
             database.add_object(name, desc)
             print(f"Объект: {name}")
 
-    # категории и их подкатегории
     for name, ctype, desc, subs in categories:
         if database.get_category_by_name(name) is None:
             database.add_category(name, ctype, desc)
@@ -76,11 +70,11 @@ def seed():
         for sub in subs:
             if database.get_subcategory_by_name(sub, category_id) is None:
                 database.add_subcategory(sub, category_id)
-                print(f"   подкатегория {name} -> {sub}")
+                print(f"   {name} -> {sub}")
 
     print()
-    print("Итого объектов:", len(database.get_objects()))
-    print("Итого категорий:", len(database.get_categories()))
+    print("Объектов:", len(database.get_objects()))
+    print("Категорий:", len(database.get_categories()))
 
 
 if __name__ == "__main__":

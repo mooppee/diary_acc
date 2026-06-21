@@ -34,7 +34,6 @@ df["date"] = df["created_at"].dt.date
 df["object"] = df["object"].fillna("Без объекта")
 df["subcategory"] = df["subcategory"].fillna("—")
 
-# =================== ФИЛЬТРЫ ===================
 st.sidebar.header("Фильтры")
 type_choice = st.sidebar.radio("Тип", ["Всё", "расход", "доход"])
 
@@ -61,7 +60,6 @@ if filtered.empty:
     st.warning("Под выбранные фильтры ничего не попало.")
     st.stop()
 
-# =================== ИТОГИ ===================
 income = filtered[filtered["type"] == "доход"]["amount"].sum()
 expense = filtered[filtered["type"] == "расход"]["amount"].sum()
 col1, col2, col3 = st.columns(3)
@@ -69,7 +67,6 @@ col1.metric("Доходы", f"{income:,.0f} ₽".replace(",", " "))
 col2.metric("Расходы", f"{expense:,.0f} ₽".replace(",", " "))
 col3.metric("Баланс", f"{income - expense:,.0f} ₽".replace(",", " "))
 
-# для разрезов берём доходы или расходы по фильтру типа
 if type_choice == "доход":
     group_df = filtered[filtered["type"] == "доход"]
     word = "Доходы"
@@ -77,7 +74,6 @@ else:
     group_df = filtered[filtered["type"] == "расход"]
     word = "Расходы"
 
-# =================== СВОДНАЯ ТАБЛИЦА (гибкая) ===================
 st.header("Сводная таблица")
 st.caption("Выбери, что в строках и столбцах — таблица перестроится. В углу — Итого.")
 
@@ -100,7 +96,6 @@ else:
 st.dataframe(pivot, use_container_width=True)
 
 
-# =================== РАЗРЕЗЫ (таблицы с долями) ===================
 def breakdown_table(data, column, label):
     t = data.groupby(column)["amount"].agg(["sum", "count"]).reset_index()
     t.columns = [label, "Сумма", "Операций"]
@@ -123,7 +118,6 @@ sub_table.columns = ["Категория", "Подкатегория", "Сумм
 sub_table = sub_table.sort_values("Сумма", ascending=False)
 st.dataframe(sub_table, use_container_width=True)
 
-# =================== ОБЪЁМЫ ===================
 st.header("Объёмы (где указано количество)")
 with_qty = filtered[filtered["quantity"].notna()]
 if not with_qty.empty:
@@ -134,7 +128,6 @@ if not with_qty.empty:
 else:
     st.write("Пока нет операций с количеством.")
 
-# =================== ГРАФИКИ (дополнение) ===================
 st.header("Графики")
 if not group_df.empty:
     st.subheader(f"{word} по объектам")
@@ -142,7 +135,6 @@ if not group_df.empty:
     st.subheader(f"{word} по категориям")
     st.bar_chart(group_df.groupby("category")["amount"].sum().sort_values(ascending=False))
 
-# =================== СПИСОК ОПЕРАЦИЙ ===================
 st.header("Все операции")
 show = filtered.sort_values("created_at", ascending=False)[
     ["date", "type", "object", "category", "subcategory", "amount", "quantity", "unit", "comment"]
