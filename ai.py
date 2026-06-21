@@ -5,45 +5,52 @@ import database
 
 
 def analyze_text(text):
+    objects = database.get_objects()
     categories = database.get_categories()
+
+    # список объектов — Claude выбирает строго из них
+    object_names = [o[1] for o in objects]
+    objects_line = ", ".join(object_names)
+
+    # категории с типом, описанием и их подкатегориями
     categories_text = ""
     for category in categories:
-        categories_text += f"- {category[1]} (тип: {category[2]}): {category[3]}\n"
+        cat_id, cat_name, cat_type, cat_desc = category
+        subs = database.get_subcategories(cat_id)
+        sub_names = [s[1] for s in subs]
+        subs_str = ", ".join(sub_names) if sub_names else "нет"
+        categories_text += f'- "{cat_name}" ({cat_type}): {cat_desc}\n      подкатегории: {subs_str}\n'
 
+    prompt = f"""Ты помощник-бухгалтер строительного бизнеса. Разбери сообщение об операции и верни JSON.
 
-    prompt = f"""Ты помощник для учёта личных финансов.
-Пользователь прислал сообщение об операции. Определи три вещи:
-1. amount - сумму (число)
-2. type - тип, строго одно из двух: "доход" или "расход"
-3. category - название категории СТРОГО из списка ниже
+Определи:
+1. amount — сумму (число)
+2. type — "доход" или "расход"
+3. object — объект (направление) СТРОГО из списка: {objects_line}.
+   Если объект в сообщении не упомянут — верни "Без объекта". Свои объекты НЕ придумывай.
+4. category — категорию. Сначала ищи подходящую среди существующих (список ниже). Только если ничего не подходит — придумай НОВУЮ короткую категорию.
+5. subcategory — уточнение внутри категории (материал, рабочий, машина и т.п.). Бери из подкатегорий, можешь предложить новую, либо верни "" если уточнения нет.
+6. comment — короткое понятное описание операции.
 
-Категории:
+Существующие категории и подкатегории:
 {categories_text}
-Сообщение пользователя: "{text}"
+Правило: СТАРАЙСЯ использовать существующие категории и подкатегории. Создавай новое только если реально ничего не подходит.
 
-Ответь ТОЛЬКО в формате JSON, без пояснений. Пример ответа:
-{{"amount": 200, "type": "расход", "category": "Расход"}}"""
+Сообщение: "{text}"
 
+Ответь ТОЛЬКО в формате JSON, без пояснений. Пример:
+{{"amount": 5000, "type": "расход", "object": "Без объекта", "category": "Техника", "subcategory": "Камаз", "comment": "масло на камаз"}}"""
 
     client = Anthropic(api_key=config.ANTHROPIC_API_KEY)
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=200,
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
+        max_tokens=400,
+        messages=[{"role": "user", "content": prompt}]
     )
-
     answer = response.content[0].text
-
     answer = answer.replace("```json", "").replace("```", "").strip()
-
-  
-    result = json.loads(answer)
-    return result
+    return json.loads(answer)
 
 
-# тестим
 if __name__ == "__main__":
-    test = analyze_text("потратил 200 на кофе")
-    print("Claude вернул:", test)
+    print(analyze_text("щебень на дс13 127600"))

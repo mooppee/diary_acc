@@ -11,44 +11,44 @@ bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
 
 
-# срабатывает, когда пользователь отправляет команду /start
 @dp.message(CommandStart())
 async def start(message: Message):
     await message.answer(
-        "Привет! Начнем с минуса или плюса?\n"
+        "Привет! Я твой дневник-бухгалтер.\n"
+        "Напиши операцию текстом, например:\n"
+        "щебень на дс13 127600\n"
+        "масло камаз 5000\n"
+        "шуре зп 15000\n"
+        "папа перевел 105000"
     )
 
 
-# срабатывает на любое текстовое сообщение
 @dp.message()
 async def handle_message(message: Message):
-    # отправляем текст пользователя на наш сервер
     try:
-        response = requests.post(
-            API_URL + "/transactions/from-text",
-            json={"text": message.text},
-            timeout=30
-        )
+        response = requests.post(API_URL + "/transactions/from-text",
+                                 json={"text": message.text}, timeout=30)
         data = response.json()
     except Exception:
-        # сюда попадём, если сервер не запущен или недоступен
         await message.answer("Не могу связаться с сервером. Он точно запущен?")
         return
 
-    # если сервер вернул успешный ответ - показываем результат
     if "message" in data:
-        answer = (
-            "Записал!\n"
-            f"Сумма: {data['amount']} руб.\n"
-            f"Тип: {data['type']}\n"
-            f"Категория: {data['category']}"
-        )
+        answer = "Записал!\n"
+        answer += f"Сумма: {data['amount']} руб.\n"
+        answer += f"Тип: {data['type']}\n"
+        answer += f"Объект: {data['object']}\n"
+        answer += f"Категория: {data['category']}\n"
+        if data.get("subcategory"):
+            answer += f"Подкатегория: {data['subcategory']}\n"
+        if data.get("created"):
+            answer += "\nНовое: " + ", ".join(data["created"])
     else:
-        answer = "Ответ сервера: " + str(data)
+        answer = "Не получилось записать операцию :("
+
     await message.answer(answer)
 
 
-# запускаем бота (он начинает слушать сообщения)
 async def main():
     await dp.start_polling(bot)
 

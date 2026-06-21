@@ -1,39 +1,62 @@
 import sqlite3
 
-# имя файла, в котором будет лежать наша база данных
+# имя файла базы данных
 DB_NAME = "diary.db"
 
 
 def get_connection():
-    # открываем соединение с базой данных
-    connection = sqlite3.connect(DB_NAME)
-    return connection
+    return sqlite3.connect(DB_NAME)
 
 
 def create_tables():
     connection = get_connection()
     cursor = connection.cursor()
 
-    # таблица категорий (например: Еда, Зарплата, Транспорт)
+    # объекты (направления): ДС13, Каменка, Личное...
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS objects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT
+        )
+    """)
+
+    # категории трат: Материалы, Зарплата...
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
+            name TEXT NOT NULL UNIQUE,
             type TEXT NOT NULL,
             description TEXT
         )
     """)
 
-    # таблица операций (доходы и расходы)
+    # подкатегории (деталь внутри категории): Песок, Армен, Камаз...
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS subcategories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            category_id INTEGER NOT NULL,
+            description TEXT,
+            FOREIGN KEY (category_id) REFERENCES categories (id),
+            UNIQUE (category_id, name)
+        )
+    """)
+
+    # операции: со ссылками на объект, категорию и подкатегорию
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             amount REAL NOT NULL,
-            description TEXT,
+            comment TEXT,
             type TEXT NOT NULL,
+            object_id INTEGER,
             category_id INTEGER,
+            subcategory_id INTEGER,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (category_id) REFERENCES categories (id)
+            FOREIGN KEY (object_id) REFERENCES objects (id),
+            FOREIGN KEY (category_id) REFERENCES categories (id),
+            FOREIGN KEY (subcategory_id) REFERENCES subcategories (id)
         )
     """)
 
@@ -42,82 +65,125 @@ def create_tables():
     print("Таблицы созданы!")
 
 
-def add_category(name, category_type, description):
-    # добавляем одну категорию в таблицу categories
+# ========== ОБЪЕКТЫ ==========
+def add_object(name, description=""):
     connection = get_connection()
     cursor = connection.cursor()
-    cursor.execute(
-        "INSERT INTO categories (name, type, description) VALUES (?, ?, ?)",
-        (name, category_type, description)
-    )
+    cursor.execute("INSERT INTO objects (name, description) VALUES (?, ?)", (name, description))
+    connection.commit()
+    connection.close()
+
+
+def get_objects():
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("SELECT id, name, description FROM objects")
+    rows = cursor.fetchall()
+    connection.close()
+    return rows
+
+
+def get_object_by_name(name):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("SELECT id, name, description FROM objects WHERE name = ?", (name,))
+    row = cursor.fetchone()
+    connection.close()
+    return row
+
+
+# ========== КАТЕГОРИИ ==========
+def add_category(name, category_type, description=""):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("INSERT INTO categories (name, type, description) VALUES (?, ?, ?)",
+                   (name, category_type, description))
     connection.commit()
     connection.close()
 
 
 def get_categories():
-    # достаём все категории из базы
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("SELECT id, name, type, description FROM categories")
-    categories = cursor.fetchall()
+    rows = cursor.fetchall()
     connection.close()
-    return categories
+    return rows
 
 
 def get_category_by_name(name):
-    # ищем одну категорию по её названию (нужно, чтобы узнать её id)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("SELECT id, name, type, description FROM categories WHERE name = ?", (name,))
-    category = cursor.fetchone()
+    row = cursor.fetchone()
     connection.close()
-    return category
+    return row
 
 
-def get_fallback_category(transaction_type):
-    # запасная категория для операций, которым не нашлась точная.
-    # "доход"  -> категория "Прочий доход"
-    # "расход" -> категория "Прочий расход"
-    if transaction_type == "доход":
-        return get_category_by_name("Прочий доход")
-    else:
-        return get_category_by_name("Прочий расход")
-
-
-def add_transaction(amount, description, transaction_type, category_id):
-    # сохраняем одну операцию в таблицу transactions
+# ========== ПОДКАТЕГОРИИ ==========
+def add_subcategory(name, category_id, description=""):
     connection = get_connection()
     cursor = connection.cursor()
-    cursor.execute(
-        "INSERT INTO transactions (amount, description, type, category_id) VALUES (?, ?, ?, ?)",
-        (amount, description, transaction_type, category_id)
-    )
+    cursor.execute("INSERT INTO subcategories (name, category_id, description) VALUES (?, ?, ?)",
+                   (name, category_id, description))
+    connection.commit()
+    connection.close()
+
+
+def get_subcategories(category_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("SELECT id, name, category_id, description FROM subcategories WHERE category_id = ?", (category_id,))
+    rows = cursor.fetchall()
+    connection.close()
+    return rows
+
+
+def get_subcategory_by_name(name, category_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("SELECT id, name, category_id, description FROM subcategories WHERE name = ? AND category_id = ?",
+                   (name, category_id))
+    row = cursor.fetchone()
+    connection.close()
+    return row
+
+
+# ========== ОПЕРАЦИИ ==========
+def add_transaction(amount, comment, transaction_type, object_id, category_id, subcategory_id):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute("""
+        INSERT INTO transactions (amount, comment, type, object_id, category_id, subcategory_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (amount, comment, transaction_type, object_id, category_id, subcategory_id))
     connection.commit()
     connection.close()
 
 
 def get_transactions():
-    # достаём все операции из базы, вместе с названием категории.
-    # JOIN соединяет таблицу операций с таблицей категорий по category_id.
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("""
         SELECT
             transactions.id,
             transactions.amount,
-            transactions.description,
+            transactions.comment,
             transactions.type,
+            objects.name,
             categories.name,
+            subcategories.name,
             transactions.created_at
         FROM transactions
+        LEFT JOIN objects ON transactions.object_id = objects.id
         LEFT JOIN categories ON transactions.category_id = categories.id
+        LEFT JOIN subcategories ON transactions.subcategory_id = subcategories.id
         ORDER BY transactions.id DESC
     """)
-    transactions = cursor.fetchall()
+    rows = cursor.fetchall()
     connection.close()
-    return transactions
+    return rows
 
 
-# этот блок выполняется, только если запустить файл напрямую: python database.py
 if __name__ == "__main__":
     create_tables()
