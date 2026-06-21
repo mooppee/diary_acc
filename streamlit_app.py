@@ -7,7 +7,6 @@ API_URL = "http://127.0.0.1:8000"
 st.set_page_config(page_title="Дневник-бухгалтер", layout="wide")
 st.title("Аналитика")
 
-# кнопка обновления данных (сбрасывает кэш)
 if st.button("Обновить данные"):
     st.cache_data.clear()
     st.rerun()
@@ -49,7 +48,6 @@ min_date = df["date"].min()
 max_date = df["date"].max()
 date_range = st.sidebar.date_input("Период", (min_date, max_date))
 
-# применяем фильтры
 filtered = df.copy()
 if type_choice != "Всё":
     filtered = filtered[filtered["type"] == type_choice]
@@ -71,7 +69,7 @@ col1.metric("Доходы", f"{income:,.0f} ₽".replace(",", " "))
 col2.metric("Расходы", f"{expense:,.0f} ₽".replace(",", " "))
 col3.metric("Баланс", f"{income - expense:,.0f} ₽".replace(",", " "))
 
-# для разрезов берём доходы или расходы в зависимости от фильтра типа
+# для разрезов берём доходы или расходы по фильтру типа
 if type_choice == "доход":
     group_df = filtered[filtered["type"] == "доход"]
     word = "Доходы"
@@ -79,34 +77,51 @@ else:
     group_df = filtered[filtered["type"] == "расход"]
     word = "Расходы"
 
-# =================== ПО ОБЪЕКТАМ ===================
-st.header(f"{word} по объектам")
-if not group_df.empty:
-    by_object = group_df.groupby("object")["amount"].sum().sort_values(ascending=False)
-    st.bar_chart(by_object)
+# =================== СВОДНАЯ ТАБЛИЦА (гибкая) ===================
+st.header("Сводная таблица")
+st.caption("Выбери, что в строках и столбцах — таблица перестроится. В углу — Итого.")
+
+dim_options = {"Объект": "object", "Категория": "category", "Подкатегория": "subcategory", "Тип": "type"}
+c1, c2, c3 = st.columns(3)
+row_dim = c1.selectbox("Строки", list(dim_options.keys()), index=0)
+col_dim = c2.selectbox("Столбцы", ["(нет)"] + list(dim_options.keys()), index=2)
+value_choice = c3.selectbox("Значение", ["Сумма ₽", "Кол-во операций"])
+
+aggfunc = "sum" if value_choice == "Сумма ₽" else "count"
+rows_col = dim_options[row_dim]
+
+if col_dim != "(нет)" and dim_options[col_dim] != rows_col:
+    cols_col = dim_options[col_dim]
+    pivot = filtered.pivot_table(index=rows_col, columns=cols_col, values="amount",
+                                 aggfunc=aggfunc, fill_value=0, margins=True, margins_name="Итого")
 else:
-    st.write("Нет данных под фильтры.")
+    pivot = filtered.pivot_table(index=rows_col, values="amount",
+                                 aggfunc=aggfunc, margins=True, margins_name="Итого")
+st.dataframe(pivot, use_container_width=True)
 
-# =================== ПО КАТЕГОРИЯМ ===================
-st.header(f"{word} по категориям")
-if not group_df.empty:
-    by_category = group_df.groupby("category")["amount"].sum().sort_values(ascending=False)
-    st.bar_chart(by_category)
 
-# =================== ОБЪЕКТ x КАТЕГОРИЯ ===================
-st.header(f"{word}: объект × категория")
-if not group_df.empty:
-    pivot = pd.pivot_table(group_df, index="object", columns="category",
-                           values="amount", aggfunc="sum", fill_value=0)
-    st.dataframe(pivot, use_container_width=True)
+# =================== РАЗРЕЗЫ (таблицы с долями) ===================
+def breakdown_table(data, column, label):
+    t = data.groupby(column)["amount"].agg(["sum", "count"]).reset_index()
+    t.columns = [label, "Сумма", "Операций"]
+    total = t["Сумма"].sum()
+    t["Доля %"] = (t["Сумма"] / total * 100).round(1) if total else 0
+    return t.sort_values("Сумма", ascending=False)
 
-# =================== ПО ПОДКАТЕГОРИЯМ ===================
-st.header("По подкатегориям")
-if not group_df.empty:
-    by_sub = group_df.groupby(["category", "subcategory"])["amount"].sum().reset_index()
-    by_sub = by_sub.sort_values("amount", ascending=False)
-    by_sub = by_sub.rename(columns={"category": "Категория", "subcategory": "Подкатегория", "amount": "Сумма"})
-    st.dataframe(by_sub, use_container_width=True)
+
+st.header(f"{word} по группам")
+
+st.subheader("По объектам")
+st.dataframe(breakdown_table(group_df, "object", "Объект"), use_container_width=True)
+
+st.subheader("По категориям")
+st.dataframe(breakdown_table(group_df, "category", "Категория"), use_container_width=True)
+
+st.subheader("По подкатегориям")
+sub_table = group_df.groupby(["category", "subcategory"])["amount"].agg(["sum", "count"]).reset_index()
+sub_table.columns = ["Категория", "Подкатегория", "Сумма", "Операций"]
+sub_table = sub_table.sort_values("Сумма", ascending=False)
+st.dataframe(sub_table, use_container_width=True)
 
 # =================== ОБЪЁМЫ ===================
 st.header("Объёмы (где указано количество)")
@@ -119,8 +134,16 @@ if not with_qty.empty:
 else:
     st.write("Пока нет операций с количеством.")
 
+# =================== ГРАФИКИ (дополнение) ===================
+st.header("Графики")
+if not group_df.empty:
+    st.subheader(f"{word} по объектам")
+    st.bar_chart(group_df.groupby("object")["amount"].sum().sort_values(ascending=False))
+    st.subheader(f"{word} по категориям")
+    st.bar_chart(group_df.groupby("category")["amount"].sum().sort_values(ascending=False))
+
 # =================== СПИСОК ОПЕРАЦИЙ ===================
-st.header("Операции")
+st.header("Все операции")
 show = filtered.sort_values("created_at", ascending=False)[
     ["date", "type", "object", "category", "subcategory", "amount", "quantity", "unit", "comment"]
 ]
