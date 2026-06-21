@@ -3,28 +3,12 @@ from pydantic import BaseModel
 import database
 import ai
 
-# создаём наше веб-приложение
 app = FastAPI()
 
 
-# данные для добавления операции вручную
-class TransactionInput(BaseModel):
-    amount: float
-    description: str
-    type: str
-    category_id: int
-
-
-# данные для операции из текста (бот пришлёт сюда просто строку)
+# данные для операции из текста (бот пришлёт строку)
 class TextInput(BaseModel):
     text: str
-
-
-# данные для создания новой категории (из Streamlit)
-class CategoryInput(BaseModel):
-    name: str
-    type: str
-    description: str = ""
 
 
 @app.get("/")
@@ -32,39 +16,23 @@ def home():
     return {"message": "Дневник-бухгалтер работает!"}
 
 
+@app.get("/objects")
+def read_objects():
+    objects = database.get_objects()
+    return [{"id": o[0], "name": o[1], "description": o[2]} for o in objects]
+
+
 @app.get("/categories")
 def read_categories():
     categories = database.get_categories()
     result = []
-    for category in categories:
+    for c in categories:
+        subs = database.get_subcategories(c[0])
         result.append({
-            "id": category[0],
-            "name": category[1],
-            "type": category[2],
-            "description": category[3]
+            "id": c[0], "name": c[1], "type": c[2], "description": c[3],
+            "subcategories": [{"id": s[0], "name": s[1]} for s in subs]
         })
     return result
-
-
-@app.post("/categories")
-def create_category(category: CategoryInput):
-    # проверим, что категории с таким именем ещё нет
-    existing = database.get_category_by_name(category.name)
-    if existing is not None:
-        return {"error": "Категория с таким названием уже есть"}
-    database.add_category(category.name, category.type, category.description)
-    return {"message": "Категория добавлена!"}
-
-
-@app.post("/transactions")
-def create_transaction(transaction: TransactionInput):
-    database.add_transaction(
-        transaction.amount,
-        transaction.description,
-        transaction.type,
-        transaction.category_id
-    )
-    return {"message": "Операция сохранена!"}
 
 
 @app.get("/transactions")
@@ -73,43 +41,61 @@ def read_transactions():
     result = []
     for t in transactions:
         result.append({
-            "id": t[0],
-            "amount": t[1],
-            "description": t[2],
-            "type": t[3],
-            "category": t[4],
-            "created_at": t[5]
+            "id": t[0], "amount": t[1], "comment": t[2], "type": t[3],
+            "object": t[4], "category": t[5], "subcategory": t[6], "created_at": t[7]
         })
     return result
 
 
-# главная новинка: операция из обычного текста через Claude
 @app.post("/transactions/from-text")
 def create_from_text(data: TextInput):
-    # 1. отправляем текст Claude, он возвращает сумму, тип и категорию
+    # 1. Claude разбирает текст на amount, type, object, category, subcategory, comment
     result = ai.analyze_text(data.text)
 
-    # 2. сначала пробуем найти категорию по точному названию
-    category = database.get_category_by_name(result["category"])
+    amount = result["amount"]
+    transaction_type = result["type"]
+    comment = result.get("comment", data.text)
 
-    # 3. если такой категории нет (Claude назвал её по-своему) -
-    #    кладём операцию в запасную категорию "Прочий доход/расход"
-    if category is None:
-        category = database.get_fallback_category(result["type"])
+    created = []  # что создали нового — сообщим пользователю
 
-    # 4. если и запасной категории нет - честно сообщаем об ошибке
-    if category is None:
-        return {"error": "Не нашёл подходящую категорию для типа: " + result["type"]}
+    # 2. ОБЪЕКТ: только из существующих, иначе "Без объекта" (бот объекты не создаёт)
+    object_row = database.get_object_by_name(result.get("object", ""))
+    if object_row is None:
+        object_row = database.get_object_by_name("Без объекта")
+    object_id = object_row[0]
 
-    category_id = category[0]
+    # 3. КАТЕГОРИЯ: ищем по имени, если нет — создаём (авто-создание)
+    category_name = (result.get("category") or "").strip()
+    if category_name == "":
+        category_name = "Прочий доход" if transaction_type == "доход" else "Прочий расход"
+    category_row = database.get_category_by_name(category_name)
+    if category_row is None:
+        database.add_category(category_name, transaction_type, "Создано автоматически")
+        category_row = database.get_category_by_name(category_name)
+        created.append(f"категория «{category_name}»")
+    category_id = category_row[0]
 
-    # 5. сохраняем операцию (в описание кладём исходный текст пользователя)
-    database.add_transaction(result["amount"], data.text, result["type"], category_id)
+    # 4. ПОДКАТЕГОРИЯ: необязательная; если есть имя — ищем/создаём
+    subcategory_id = None
+    subcategory_name = (result.get("subcategory") or "").strip()
+    if subcategory_name != "":
+        sub_row = database.get_subcategory_by_name(subcategory_name, category_id)
+        if sub_row is None:
+            database.add_subcategory(subcategory_name, category_id, "Создано автоматически")
+            sub_row = database.get_subcategory_by_name(subcategory_name, category_id)
+            created.append(f"подкатегория «{subcategory_name}»")
+        subcategory_id = sub_row[0]
 
-    # 6. сообщаем, что записали (категорию берём ту, что реально из базы)
+    # 5. сохраняем операцию
+    database.add_transaction(amount, comment, transaction_type, object_id, category_id, subcategory_id)
+
+    # 6. ответ
     return {
-        "message": "Операция сохранена через Claude!",
-        "amount": result["amount"],
-        "type": result["type"],
-        "category": category[1]
+        "message": "Операция сохранена!",
+        "amount": amount,
+        "type": transaction_type,
+        "object": object_row[1],
+        "category": category_row[1],
+        "subcategory": subcategory_name if subcategory_name else None,
+        "created": created,
     }
