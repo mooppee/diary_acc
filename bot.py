@@ -41,6 +41,9 @@ async def handle_message(message: Message):
         answer += f"Категория: {data['category']}\n"
         if data.get("subcategory"):
             answer += f"Подкатегория: {data['subcategory']}\n"
+        if data.get("quantity"):
+            unit = data.get("unit") or ""
+            answer += f"Количество: {data['quantity']} {unit}\n"
         if data.get("created"):
             answer += "\nНовое: " + ", ".join(data["created"])
     else:

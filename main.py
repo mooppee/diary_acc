@@ -41,15 +41,16 @@ def read_transactions():
     result = []
     for t in transactions:
         result.append({
-            "id": t[0], "amount": t[1], "comment": t[2], "type": t[3],
-            "object": t[4], "category": t[5], "subcategory": t[6], "created_at": t[7]
+            "id": t[0], "amount": t[1], "quantity": t[2], "unit": t[3],
+            "comment": t[4], "type": t[5], "object": t[6],
+            "category": t[7], "subcategory": t[8], "created_at": t[9]
         })
     return result
 
 
 @app.post("/transactions/from-text")
 def create_from_text(data: TextInput):
-    # 1. Claude разбирает текст на amount, type, object, category, subcategory, comment
+    # 1. Claude разбирает текст
     result = ai.analyze_text(data.text)
 
     amount = result["amount"]
@@ -58,13 +59,13 @@ def create_from_text(data: TextInput):
 
     created = []  # что создали нового — сообщим пользователю
 
-    # 2. ОБЪЕКТ: только из существующих, иначе "Без объекта" (бот объекты не создаёт)
+    # 2. ОБЪЕКТ: только из существующих, иначе "Без объекта"
     object_row = database.get_object_by_name(result.get("object", ""))
     if object_row is None:
         object_row = database.get_object_by_name("Без объекта")
     object_id = object_row[0]
 
-    # 3. КАТЕГОРИЯ: ищем по имени, если нет — создаём (авто-создание)
+    # 3. КАТЕГОРИЯ: ищем по имени, если нет — создаём
     category_name = (result.get("category") or "").strip()
     if category_name == "":
         category_name = "Прочий доход" if transaction_type == "доход" else "Прочий расход"
@@ -86,10 +87,18 @@ def create_from_text(data: TextInput):
             created.append(f"подкатегория «{subcategory_name}»")
         subcategory_id = sub_row[0]
 
-    # 5. сохраняем операцию
-    database.add_transaction(amount, comment, transaction_type, object_id, category_id, subcategory_id)
+    # 5. количество и единица измерения (необязательные)
+    quantity = result.get("quantity")
+    try:
+        quantity = float(quantity) if quantity not in (None, "") else None
+    except (ValueError, TypeError):
+        quantity = None
+    unit = (result.get("unit") or "").strip() or None
 
-    # 6. ответ
+    # 6. сохраняем операцию
+    database.add_transaction(amount, comment, transaction_type, object_id, category_id, subcategory_id, quantity, unit)
+
+    # 7. ответ
     return {
         "message": "Операция сохранена!",
         "amount": amount,
@@ -97,5 +106,7 @@ def create_from_text(data: TextInput):
         "object": object_row[1],
         "category": category_row[1],
         "subcategory": subcategory_name if subcategory_name else None,
+        "quantity": quantity,
+        "unit": unit,
         "created": created,
     }

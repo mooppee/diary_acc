@@ -43,11 +43,13 @@ def create_tables():
         )
     """)
 
-    # операции: со ссылками на объект, категорию и подкатегорию
+    # операции: со ссылками на объект/категорию/подкатегорию + количество и единица
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             amount REAL NOT NULL,
+            quantity REAL,
+            unit TEXT,
             comment TEXT,
             type TEXT NOT NULL,
             object_id INTEGER,
@@ -150,13 +152,13 @@ def get_subcategory_by_name(name, category_id):
 
 
 # ========== ОПЕРАЦИИ ==========
-def add_transaction(amount, comment, transaction_type, object_id, category_id, subcategory_id):
+def add_transaction(amount, comment, transaction_type, object_id, category_id, subcategory_id, quantity=None, unit=None):
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("""
-        INSERT INTO transactions (amount, comment, type, object_id, category_id, subcategory_id)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (amount, comment, transaction_type, object_id, category_id, subcategory_id))
+        INSERT INTO transactions (amount, quantity, unit, comment, type, object_id, category_id, subcategory_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (amount, quantity, unit, comment, transaction_type, object_id, category_id, subcategory_id))
     connection.commit()
     connection.close()
 
@@ -168,6 +170,8 @@ def get_transactions():
         SELECT
             transactions.id,
             transactions.amount,
+            transactions.quantity,
+            transactions.unit,
             transactions.comment,
             transactions.type,
             objects.name,
